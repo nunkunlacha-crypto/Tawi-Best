@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบค้นหาหนังสือรับรองการหักภาษี (50 ทวิ)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body { font-family: Tahoma, sans-serif; background-color: #f4f4f4; padding: 20px; }
+        .container { max-width: 800px; margin: auto; padding: 30px; background: white; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        h1 { color: #880e4f; text-align: center; border-bottom: 2px solid #880e4f; padding-bottom: 10px; }
+        .input-group { display: flex; gap: 10px; margin: 20px 0; }
+        input { flex: 1; padding: 12px; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; }
+        button { padding: 12px 20px; background: #880e4f; color: white; border: none; cursor: pointer; border-radius: 4px; font-weight: bold; }
+        #status-message { padding: 10px; text-align: center; font-weight: bold; margin-bottom: 10px; border-radius: 4px; }
+        .status-loading { background: #fff3e0; color: #ef6c00; }
+        .status-success { background: #e8f5e9; color: #2e7d32; }
+        .status-error { background: #ffebee; color: #c62828; }
+        .tawi50-box { border: 2px solid #880e4f; padding: 20px; border-radius: 8px; margin-top: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background: #fce4ec; color: #880e4f; width: 40%; }
+        .btn-print { background: #2e7d32; width: 100%; margin-top: 15px; padding: 15px; font-size: 16px; }
+        @media print {
+            .input-group, button, h1, #status-message { display: none !important; }
+            .container { box-shadow: none; width: 100%; margin: 0; }
+            .tawi50-box { border: 1px solid #000; }
+        }
+    </style>
+</head>
+<body onload="loadSheetData()">
+    <div class="container">
+        <h1>ค้นหาหนังสือรับรองการหักภาษี (50 ทวิ)</h1>
+        <div id="status-message" class="status-loading">⏳ กำลังโหลดข้อมูล...</div>
+        <div class="input-group">
+            <input type="text" id="taxIdInput" placeholder="กรอกเลขประจำตัวผู้เสียภาษี 13 หลัก" maxlength="13">
+            <button onclick="searchTawi50()">ค้นหา</button>
+        </div>
+        <div id="resultArea"></div>
+    </div>
+
+    <script>
+        // *** ตรวจสอบลิงก์นี้ให้เป็นลิงก์ CSV จาก Google Sheets ของคุณ ***
+        const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1rpXCyMHEyLmkyZsx1JjMB81kMFeBeNBtcwfhpeiMUpE/export?format=csv&gid=0';
+        
+        let jsonData = [];
+        const ID_KEY = 'เลขประจำตัวผู้เสียภาษีอากร';
+
+        async function loadSheetData() {
+            const status = document.getElementById('status-message');
+            try {
+                const response = await fetch(SHEET_URL, { cache: 'no-cache' });
+                const csvText = await response.text();
+                const workbook = XLSX.read(csvText, { type: 'string' });
+                const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1 });
+                
+                const headers = rows[4]; // แถวที่ 5 (หัวตาราง)
+                const body = rows.slice(5); // ข้อมูลตั้งแต่แถวที่ 6 ลงไป
+                
+                jsonData = body.map(row => {
+                    let obj = {};
+                    headers.forEach((h, i) => { if(h) obj[h.trim()] = row[i]; });
+                    return obj;
+                }).filter(item => String(item[ID_KEY] || '').replace(/[^0-9]/g, '').length === 13);
+
+                status.className = 'status-success';
+                status.innerHTML = '✅ ข้อมูลพร้อมใช้งาน';
+            } catch (e) {
+                status.className = 'status-error';
+                status.innerHTML = '❌ โหลดข้อมูลไม่สำเร็จ ตรวจสอบการ Publish Sheet';
+            }
+        }
+
+        function searchTawi50() {
+            const input = document.getElementById('taxIdInput').value.replace(/[^0-9]/g, '');
+            const resultArea = document.getElementById('resultArea');
+            if (input.length !== 13) { alert('กรุณากรอกเลข 13 หลัก'); return; }
+
+            const found = jsonData.find(item => String(item[ID_KEY]).replace(/[^0-9]/g, '') === input);
+
+            if (found) {
+                let html = `<div class="tawi50-box"><h3>ข้อมูลหนังสือรับรองภาษี</h3><table>`;
+                const displayList = [
+                    { n: 'ชื่อ-นามสกุล', k: 'ชื่อ - นามสกุล' },
+                    { n: 'ประเภทภาษีเงินได้', k: 'ประเภทภาษีเงินได้' }, // ดึงจากคอลัมน์ D
+                    { n: 'จำนวนเงินที่จ่าย', k: Object.keys(found).find(k => k.includes('จำนวนเงินที่จ่าย')) },
+                    { n: 'ภาษีหักและนำส่งไว้', k: Object.keys(found).find(k => k.includes('ภาษี่หัก')) },
+                    { n: 'ปีภาษี', k: Object.keys(found).find(k => k.includes('ปีภาษี')) }
+                ];
+
+                displayList.forEach(item => {
+                    let val = found[item.k] || '-';
+                    if (item.n.includes('เงิน') || item.n.includes('ภาษี')) {
+                        let num = parseFloat(String(val).replace(/,/g, ''));
+                        val = !isNaN(num) ? num.toLocaleString('th-TH', {minimumFractionDigits:2}) + ' บาท' : val;
+                    }
+                    html += `<tr><th>${item.n}</th><td>${val}</td></tr>`;
+                });
+
+                html += `</table><button class="btn-print" onclick="window.print()">พิมพ์ หรือ บันทึก PDF</button></div>`;
+                resultArea.innerHTML = html;
+            } else {
+                resultArea.innerHTML = '<p class="status-error">ไม่พบข้อมูลเลขประจำตัวนี้</p>';
+            }
+        }
+    </script>
+</body>
+</html>
