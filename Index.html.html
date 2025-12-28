@@ -3,104 +3,142 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ระบบค้นหาข้อมูล 50 ทวิ</title>
+    <title>ระบบค้นหาหนังสือรับรองการหักภาษี ณ ที่จ่าย (50 ทวิ)</title>
+    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
     <style>
-        body { font-family: 'Tahoma', sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px; }
-        .container { max-width: 850px; margin: auto; padding: 25px; background: white; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); border-top: 10px solid #880e4f; }
-        h1 { color: #880e4f; text-align: center; font-size: 24px; margin-bottom: 20px; }
-        .search-area { display: flex; gap: 10px; margin: 20px 0; background: #fce4ec; padding: 20px; border-radius: 8px; }
-        input { flex: 1; padding: 15px; border: 2px solid #ddd; border-radius: 6px; font-size: 18px; outline: none; }
-        input:focus { border-color: #880e4f; }
-        button { padding: 15px 25px; background: #880e4f; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 18px; }
-        #status { text-align: center; font-weight: bold; margin-bottom: 15px; padding: 10px; border-radius: 4px; }
-        .ok { background: #e8f5e9; color: #2e7d32; }
-        .err { background: #ffebee; color: #c62828; }
+        /* สไตล์หน้าเว็บ */
+        body { font-family: 'Tahoma', sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 850px; margin: 20px auto; padding: 30px; background: white; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); border-top: 10px solid #880e4f; }
+        h1 { color: #880e4f; text-align: center; font-size: 24px; margin-bottom: 25px; border-bottom: 2px solid #eee; padding-bottom: 15px; }
         
-        /* สไตล์ตารางแบบในรูปที่คุณส่งมา */
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; background: #fff; }
-        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; font-size: 15px; }
-        th { background: #fce4ec; color: #880e4f; width: 45%; }
-        tr:nth-child(even) { background-color: #fcfcfc; }
+        /* ส่วนค้นหา */
+        .search-section { display: flex; gap: 10px; margin-bottom: 25px; background: #fce4ec; padding: 20px; border-radius: 8px; }
+        input[type="text"] { flex: 1; padding: 15px; border: 2px solid #ddd; border-radius: 6px; font-size: 18px; outline: none; }
+        input[type="text"]:focus { border-color: #880e4f; }
+        button { padding: 15px 25px; background: #880e4f; color: white; border: none; cursor: pointer; border-radius: 6px; font-weight: bold; font-size: 18px; transition: 0.3s; }
+        button:hover { background: #5d0737; }
 
-        .btn-print { background: #2e7d32; width: 100%; margin-top: 20px; padding: 15px; color: white; border: none; border-radius: 6px; font-size: 18px; cursor: pointer; font-weight: bold; }
-        
+        /* ข้อความสถานะ */
+        #status-message { padding: 12px; text-align: center; font-weight: bold; border-radius: 6px; margin-bottom: 20px; font-size: 14px; }
+        .status-loading { background: #fff3e0; color: #ef6c00; }
+        .status-success { background: #e8f5e9; color: #2e7d32; }
+        .status-error { background: #ffebee; color: #c62828; }
+
+        /* ตารางแสดงผล */
+        .tawi-table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; }
+        .tawi-table th, .tawi-table td { border: 1px solid #ddd; padding: 14px; text-align: left; font-size: 16px; }
+        .tawi-table th { background-color: #fce4ec; color: #880e4f; width: 40%; font-weight: bold; }
+        .tawi-table tr:nth-child(even) { background-color: #fafafa; }
+
+        /* ปุ่มพิมพ์ */
+        .btn-print { background-color: #2e7d32; width: 100%; margin-top: 25px; padding: 18px; font-size: 18px; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+        .btn-print:hover { background-color: #1b5e20; }
+
+        /* ตั้งค่าตอนพิมพ์เอกสาร */
         @media print {
-            .search-area, button, h1, #status { display: none !important; }
-            .container { border: 1px solid #000; box-shadow: none; width: 100%; padding: 0; }
-            table { border: 1px solid #000; width: 100%; }
+            body { background: white; padding: 0; }
+            .container { box-shadow: none; border: 1px solid #333; width: 100%; margin: 0; padding: 20px; }
+            .search-section, button, #status-message, h1 { display: none !important; }
+            .tawi-table { border: 1px solid #000; }
+            .tawi-table th, .tawi-table td { border: 1px solid #000; }
         }
     </style>
 </head>
-<body onload="init()">
+<body onload="loadSheetData()">
+
     <div class="container">
-        <h1>ค้นหาหนังสือรับรองการหักภาษี (50 ทวิ)</h1>
-        <div id="status" class="err">⏳ กำลังเชื่อมต่อฐานข้อมูล...</div>
-        <div class="search-area">
-            <input type="text" id="idInput" placeholder="กรอกเลขผู้เสียภาษี 13 หลัก" maxlength="13">
-            <button onclick="doSearch()">ค้นหาข้อมูล</button>
+        <h1>ตรวจสอบข้อมูลหนังสือรับรองการหักภาษี (50 ทวิ)</h1>
+        
+        <div id="status-message" class="status-loading">⏳ กำลังเชื่อมต่อฐานข้อมูล...</div>
+
+        <div class="search-section">
+            <input type="text" id="taxIdInput" placeholder="กรอกเลขประจำตัวผู้เสียภาษี 13 หลัก" maxlength="13">
+            <button onclick="searchData()">ค้นหาข้อมูล</button>
         </div>
-        <div id="result"></div>
+
+        <div id="resultOutput"></div>
     </div>
 
     <script>
-        // ลิงก์ CSV จาก Google Sheets ของคุณ
-        const CSV_URL = 'https://docs.google.com/spreadsheets/d/1rpXCyMHEyLmkyZsx1JjMB81kMFeBeNBtcwfhpeiMUpE/export?format=csv&gid=0';
-        let jsonData = [];
-        const KEY_ID = 'เลขประจำตัวผู้เสียภาษีอากร';
+        // ลิงก์จาก Google Sheets ของคุณ
+        const GOOGLE_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1rpXCyMHEyLmkyZsx1JjMB81kMFeBeNBtcwfhpeiMUpE/export?format=csv&gid=0';
+        
+        let database = [];
+        const TAX_ID_COL_NAME = 'เลขประจำตัวผู้เสียภาษีอากร'; // คอลัมน์ B
 
-        async function init() {
-            const st = document.getElementById('status');
+        async function loadSheetData() {
+            const status = document.getElementById('status-message');
             try {
-                const response = await fetch(CSV_URL, { cache: 'no-cache' });
-                const text = await response.text();
-                const wb = XLSX.read(text, { type: 'string' });
-                const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
-                
-                // ข้อมูลหัวตารางอยู่ที่แถวที่ 5
-                const headers = rows[4]; 
-                jsonData = rows.slice(5).map(row => {
+                const response = await fetch(GOOGLE_SHEET_URL, { cache: 'no-cache' });
+                const csvText = await response.text();
+                const workbook = XLSX.read(csvText, { type: 'string' });
+                const allRows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1 });
+
+                // หัวตารางอยู่ที่แถวที่ 5 (Index 4)
+                const headers = allRows[4]; 
+                const dataRows = allRows.slice(5);
+
+                database = dataRows.map(row => {
                     let obj = {};
-                    headers.forEach((h, i) => { if(h) obj[h.trim()] = row[i]; });
+                    headers.forEach((headerName, index) => {
+                        if(headerName) obj[headerName.trim()] = row[index];
+                    });
                     return obj;
+                }).filter(item => {
+                    const id = String(item[TAX_ID_COL_NAME] || '').replace(/[^0-9]/g, '');
+                    return id.length === 13;
                 });
+
+                status.className = 'status-success';
+                status.innerHTML = '✅ ข้อมูลอัปเดตแล้ว พร้อมสำหรับการตรวจสอบ';
+            } catch (error) {
+                status.className = 'status-error';
+                status.innerHTML = '❌ โหลดข้อมูลไม่สำเร็จ กรุณาตรวจสอบการ Publish ใน Google Sheets';
+            }
+        }
+
+        function searchData() {
+            const userInput = document.getElementById('taxIdInput').value.replace(/[^0-9]/g, '');
+            const outputArea = document.getElementById('resultOutput');
+            
+            if (userInput.length !== 13) {
+                alert("กรุณากรอกเลขประจำตัวผู้เสียภาษีให้ครบ 13 หลัก");
+                return;
+            }
+
+            const foundRecord = database.find(item => 
+                String(item[TAX_ID_COL_NAME]).replace(/[^0-9]/g, '') === userInput
+            );
+
+            if (foundRecord) {
+                // ดึงข้อมูลจากคอลัมน์ P (ประเภทภาษีเงินได้)
+                let taxCategory = foundRecord['ประเภทภาษีเงินได้'] || '-';
                 
-                st.className = 'ok';
-                st.innerHTML = '✅ เชื่อมต่อฐานข้อมูลสำเร็จ พร้อมใช้งาน';
-            } catch (e) {
-                st.innerHTML = '❌ โหลดข้อมูลไม่สำเร็จ กรุณาตรวจสอบลิงก์ Google Sheets';
-            }
-        }
-
-        function doSearch() {
-            const input = document.getElementById('idInput').value.replace(/[^0-9]/g, '');
-            const resArea = document.getElementById('result');
-            if (input.length !== 13) { alert('กรุณากรอกเลขให้ครบ 13 หลัก'); return; }
-
-            const found = jsonData.find(d => String(d[KEY_ID]).replace(/[^0-9]/g, '') === input);
-
-            if (found) {
-                let html = `<table>
-                    <tr><th>รายการ</th><td>รายละเอียด</td></tr>
-                    <tr><th>เลขประจำตัวผู้เสียภาษีอากร</th><td>${found[KEY_ID] || '-'}</td></tr>
-                    <tr><th>ชื่อ - นามสกุล</th><td>${found['ชื่อ - นามสกุล'] || '-'}</td></tr>
-                    <tr><th>ที่อยู่</th><td>${found['ที่อยู่'] || '-'}</td></tr>
-                    <tr><th>ประเภทภาษีเงินได้</th><td><strong>${found['ประเภทภาษีเงินได้'] || '-'}</strong></td></tr>
-                    <tr><th>จำนวนเงินที่จ่าย</th><td>${formatNum(found['จำนวนเงินที่จ่าย'])} บาท</td></tr>
-                    <tr><th>ภาษีหักและนำส่งไว้</th><td>${formatNum(found['ภาษีหักและนำส่งไว้'] || found['ภาษี่หักและนำส่งไว้'])} บาท</td></tr>
-                    <tr><th>ปีภาษีที่จ่ายเงินได้</th><td>${found['ปีภาษีที่จ่ายเงินได้'] || '-'}</td></tr>
-                    <tr><th>ชื่อบริษัทผู้หักภาษี</th><td>${found['ชื่อบริษัทที่มีหน้าที่หักภาษี ณ ที่จ่าย'] || '-'}</td></tr>
-                </table>
-                <button class="btn-print" onclick="window.print()">พิมพ์เอกสาร หรือ บันทึกเป็น PDF</button>`;
-                resArea.innerHTML = html;
+                let html = `
+                    <div class="result-card">
+                        <table class="tawi-table">
+                            <tr><th>เลขประจำตัวผู้เสียภาษี</th><td>${foundRecord[TAX_ID_COL_NAME]}</td></tr>
+                            <tr><th>ชื่อ - นามสกุล</th><td>${foundRecord['ชื่อ - นามสกุล'] || '-'}</td></tr>
+                            <tr><th>ที่อยู่</th><td>${foundRecord['ที่อยู่'] || '-'}</td></tr>
+                            <tr><th>ประเภทภาษีเงินได้</th><td><strong>${taxCategory}</strong></td></tr>
+                            <tr><th>จำนวนเงินที่จ่าย</th><td>${formatCurrency(foundRecord['จำนวนเงินที่จ่าย'])} บาท</td></tr>
+                            <tr><th>ภาษีหักและนำส่งไว้</th><td>${formatCurrency(foundRecord['ภาษี่หักและนำส่งไว้'] || foundRecord['ภาษีหักและนำส่งไว้'])} บาท</td></tr>
+                            <tr><th>ปีภาษี</th><td>${foundRecord['ปีภาษีที่จ่ายเงินได้'] || '-'}</td></tr>
+                            <tr><th>ผู้จ่ายเงินได้</th><td>${foundRecord['ชื่อบริษัทที่มีหน้าที่หักภาษี ณ ที่จ่าย'] || '-'}</td></tr>
+                        </table>
+                        <button class="btn-print" onclick="window.print()">พิมพ์เอกสาร หรือ บันทึกเป็น PDF</button>
+                    </div>`;
+                outputArea.innerHTML = html;
             } else {
-                resArea.innerHTML = '<p class="err" style="text-align:center">❌ ไม่พบข้อมูลสำหรับเลขประจำตัวนี้</p>';
+                outputArea.innerHTML = '<div id="status-message" class="status-error" style="margin-top:20px;">❌ ไม่พบข้อมูลสำหรับเลขประจำตัวนี้ในระบบ</div>';
             }
         }
 
-        function formatNum(val) {
-            let n = parseFloat(String(val).replace(/,/g, ''));
-            return isNaN(n) ? '-' : n.toLocaleString('th-TH', {minimumFractionDigits: 2});
+        function formatCurrency(value) {
+            let n = parseFloat(String(value).replace(/,/g, ''));
+            return isNaN(n) ? '0.00' : n.toLocaleString('th-TH', {minimumFractionDigits: 2, maximumFractionDigits: 2});
         }
     </script>
 </body>
